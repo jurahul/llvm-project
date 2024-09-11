@@ -36,6 +36,7 @@
 #include "llvm/IR/InstIterator.h"
 #include "llvm/IR/Instructions.h"
 #include "llvm/IR/IntrinsicInst.h"
+#include "llvm/IR/IntrinsicModifiers.h"
 #include "llvm/IR/Intrinsics.h"
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/Metadata.h"
@@ -7968,6 +7969,48 @@ bool LLParser::parseLandingPad(Instruction *&Inst, PerFunctionState &PFS) {
   return false;
 }
 
+// Parse intrinsic modifiers and stick them into the argument list at
+// appropriate position. Return true if parsing of the modifiers failed.
+bool LLParser::parseIntrinsicModifiers(StringRef Name, LocTy Loc,
+                                       SmallVectorImpl<ParamInfo> &ArgList) {
+  auto [IID, Suffix] = Function::lookupIntrinsicIDAndSuffix(Name);
+  if (!Intrinsic::HasModifiers(IID))
+    return false;
+
+  // If the suffix is empty, do not fail parsing. We may be parsing the syntax
+  // without argument modifiers but instead the modargs explicitly in the IR.
+  // If that's not the case, we will fail later on in validateEndOfModule.
+  if (Suffix.empty())
+    return false;
+
+  SmallVector<ConstantInt *> ModArgs;
+  // TODO: check support for mix of overloaded and modifier based intrinsics.
+
+  if (Intrinsic::ParseModifiers(Context, IID, Suffix, ModArgs))
+    return true; // Parsing failed.
+  // Push the parameters at appropriate place.
+  auto ModArgPosition = Intrinsic::GetModifierArgPosition(IID);
+  unsigned OldArgListSize = ArgList.size();
+
+  // TODO: stick immarg attribute on these?
+  AttributeSet ModAttr = AttributeSet::get(Context, {});
+  ArgList.resize(OldArgListSize + ModArgs.size(),
+                 ParamInfo(Loc, nullptr, ModAttr));
+  unsigned ModArgIndex;
+  if (ModArgPosition.first) {
+    // If modifiers are to be added at start, make space for them.
+    std::move_backward(ArgList.begin(), ArgList.begin() + OldArgListSize,
+                       ArgList.end());
+    ModArgIndex = 0;
+  } else {
+    ModArgIndex = OldArgListSize;
+  }
+
+  for (ConstantInt *Mod : ModArgs)
+    ArgList[ModArgIndex++].V = Mod;
+  return false;
+}
+
 /// parseFreeze
 ///   ::= 'freeze' Type Value
 bool LLParser::parseFreeze(Instruction *&Inst, PerFunctionState &PFS) {
@@ -8020,6 +8063,12 @@ bool LLParser::parseCall(Instruction *&Inst, PerFunctionState &PFS,
       parseOptionalOperandBundles(BundleList, PFS))
     return true;
 
+  // Check if callee is an intrinsic with modifiers.
+  if (CalleeID.Kind == ValID::t_GlobalName &&
+      StringRef(CalleeID.StrVal).starts_with("llvm.")) {
+    if (parseIntrinsicModifiers(CalleeID.StrVal, CalleeID.Loc, ArgList))
+      return error(CalleeID.Loc, "invalid intrinsic modifiers");
+  }
   // If RetType is a non-function pointer type, then this is the short syntax
   // for the call, which means that RetType is just the return type.  Infer the
   // rest of the function argument types from the arguments that are present.

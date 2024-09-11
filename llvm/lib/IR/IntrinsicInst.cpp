@@ -267,6 +267,8 @@ int llvm::Intrinsic::lookupLLVMIntrinsicByName(ArrayRef<const char *> NameTable,
   if (LastLow == NameTable.end())
     return -1;
   StringRef NameFound = *LastLow;
+  // If we find an exact match, or if we find a matching prefix and a suffix
+  // that starts with a ., return the match.
   if (Name == NameFound ||
       (Name.starts_with(NameFound) && Name[NameFound.size()] == '.'))
     return LastLow - NameTable.begin();

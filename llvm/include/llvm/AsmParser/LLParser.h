@@ -656,6 +656,8 @@ namespace llvm {
     bool parseLandingPad(Instruction *&Inst, PerFunctionState &PFS);
     bool parseCall(Instruction *&Inst, PerFunctionState &PFS,
                    CallInst::TailCallKind TCK);
+    bool parseIntrinsicModifiers(StringRef Name, LocTy Loc,
+                                 SmallVectorImpl<ParamInfo> &ArgList);
     int parseAlloc(Instruction *&Inst, PerFunctionState &PFS);
     int parseLoad(Instruction *&Inst, PerFunctionState &PFS);
     int parseStore(Instruction *&Inst, PerFunctionState &PFS);

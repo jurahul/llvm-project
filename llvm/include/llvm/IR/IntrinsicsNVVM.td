@@ -4893,4 +4893,9 @@ def int_nvvm_setmaxnreg_dec_sync_aligned_u32
 def int_nvvm_exit : ClangBuiltin<"__nvvm_exit">,
     Intrinsic<[], [], [IntrConvergent, IntrInaccessibleMemOnly, IntrNoReturn]>;
 
+def int_nvvm_float_op0 : Intrinsic<[], [llvm_float_ty, llvm_i1_ty, llvm_i16_ty]>;
+def int_nvvm_float_op1 : Intrinsic<[], [llvm_i32_ty, llvm_float_ty]>;
+def int_nvvm_float_op2 : Intrinsic<[], [llvm_i32_ty, llvm_anyfloat_ty]>;
+def int_nvvm_float_op3 : Intrinsic<[], [llvm_anyfloat_ty]>;
+
 } // let TargetPrefix = "nvvm"

@@ -53,6 +53,8 @@
 #include "llvm/IR/Instruction.h"
 #include "llvm/IR/Instructions.h"
 #include "llvm/IR/IntrinsicInst.h"
+#include "llvm/IR/IntrinsicModifiers.h"
+#include "llvm/IR/Intrinsics.h"
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/Metadata.h"
 #include "llvm/IR/Module.h"
@@ -437,8 +439,12 @@ static void PrintLLVMName(raw_ostream &OS, StringRef Name, PrefixType Prefix) {
 /// Turn the specified name into an 'LLVM name', which is either prefixed with %
 /// (if the string only contains simple characters) or is surrounded with ""'s
 /// (if it has special chars in it). Print it out.
-static void PrintLLVMName(raw_ostream &OS, const Value *V) {
-  PrintLLVMName(OS, V->getName(),
+/// Also drop `DropSuffixSize` number of characters from the name. Used to
+/// elide "overload suffix" for intrinsics that are both overloaded and have
+/// modifiers.
+static void PrintLLVMName(raw_ostream &OS, const Value *V,
+                          unsigned DropSuffixSize = 0) {
+  PrintLLVMName(OS, V->getName().drop_back(DropSuffixSize),
                 isa<GlobalValue>(V) ? GlobalPrefix : LocalPrefix);
 }
 
@@ -4420,12 +4426,43 @@ void AssemblyWriter::printInstruction(const Instruction &I) {
     Out << ' ';
     TypePrinter.print(FTy->isVarArg() ? FTy : RetTy, Out);
     Out << ' ';
-    writeOperand(Operand, false);
+
+    unsigned OpIdx = 0, OpEnd = CI->arg_size();
+
+    // If its an intrinsic inst with modifiers, print these modifiers, and
+    // also we need to elide operands corresponding to these modifiers. That is
+    // drop them from `args`.
+    if (const IntrinsicInst *II = dyn_cast<IntrinsicInst>(CI);
+        II && Intrinsic::HasModifiers(II->getIntrinsicID())) {
+      Function *Intrinsic = II->getCalledFunction();
+      Intrinsic::ID ID = II->getIntrinsicID();
+      // For overloaded intrinsics with modifiers, print the "overload suffix"
+      // after the modifiers.
+      StringRef OverloadSuffix;
+      if (Intrinsic::isOverloaded(ID)) {
+        StringRef BaseName = Intrinsic::getBaseName(ID);
+        OverloadSuffix = Intrinsic->getName().drop_front(BaseName.size());
+      }
+      // Print <base_name>.modifiers.overload_suffix.
+      PrintLLVMName(Out, II->getCalledFunction(), OverloadSuffix.size());
+      Intrinsic::PrintModifiers(Out, *II);
+      Out << OverloadSuffix;
+
+      auto arg_pos = Intrinsic::GetModifierArgPosition(II->getIntrinsicID());
+      if (arg_pos.first) { // mods at start
+        OpIdx += arg_pos.second;
+      } else {
+        OpEnd -= arg_pos.second;
+      }
+    } else {
+      writeOperand(Operand, false);
+    }
     Out << '(';
-    for (unsigned op = 0, Eop = CI->arg_size(); op < Eop; ++op) {
-      if (op > 0)
+
+    for (bool First = true; OpIdx < OpEnd; ++OpIdx, First = false) {
+      if (!First)
         Out << ", ";
-      writeParamOperand(CI->getArgOperand(op), PAL.getParamAttrs(op));
+      writeParamOperand(CI->getArgOperand(OpIdx), PAL.getParamAttrs(OpIdx));
     }
 
     // Emit an ellipsis if this is a musttail call in a vararg function.  This
