@@ -2155,7 +2155,7 @@ static void emitDecodeInstruction(formatted_raw_ostream &OS,
                 NumToSkipSizeInBytes);
 
   OS << R"(
-inline unsigned decodeNumToSkip(const uint8_t *&Ptr) {
+static unsigned decodeNumToSkip(const uint8_t *&Ptr) {
   unsigned NumToSkip = *Ptr++;
   NumToSkip |= (*Ptr++) << 8;
   if constexpr (NumToSkipSizeInBytes == 3)
