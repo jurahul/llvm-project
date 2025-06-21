@@ -27,6 +27,7 @@
 #include "llvm/MC/MCSubtargetInfo.h"
 #include "llvm/MC/MCTargetOptionsCommandFlags.h"
 #include "llvm/MC/TargetRegistry.h"
+#include "llvm/ADT/ScopeExit.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Compression.h"
 #include "llvm/Support/FileUtilities.h"
@@ -38,6 +39,7 @@
 #include "llvm/Support/ToolOutputFile.h"
 #include "llvm/Support/WithColor.h"
 #include "llvm/TargetParser/Host.h"
+#include "llvm/Support/TimeProfiler.h"
 
 using namespace llvm;
 
@@ -359,6 +361,17 @@ int main(int argc, char **argv) {
   llvm::InitializeAllAsmParsers();
   llvm::InitializeAllDisassemblers();
 
+  timeTraceProfilerInitialize(0, argv[0]);
+  auto TimeTraceScopeExit = make_scope_exit([]() {
+    if (auto E = timeTraceProfilerWrite("/tmp/xyz", "xyz")) {
+      handleAllErrors(std::move(E), [&](const StringError &SE) {
+        errs() << SE.getMessage() << "\n";
+      });
+      return;
+    }
+    timeTraceProfilerCleanup();
+  });
+
   // Register the target printer for --version.
   cl::AddExtraVersionPrinter(TargetRegistry::printRegisteredTargetsForVersion);
 
@@ -612,5 +625,6 @@ int main(int argc, char **argv) {
     if (DwoOut)
       DwoOut->keep();
   }
+
   return Res;
 }

@@ -26,6 +26,7 @@
 #include "llvm/Support/SourceMgr.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/TargetParser/Triple.h"
+#include "llvm/Support/TimeProfiler.h"
 
 using namespace llvm;
 
@@ -69,6 +70,16 @@ static bool PrintInsts(const MCDisassembler &DisAsm, const ByteArrayTy &Bytes,
     case MCDisassembler::Success:
       Streamer.emitInstruction(Inst, STI);
       break;
+    }
+
+    if (S == MCDisassembler::Success) {
+      // Benchmark mode, collect timing for decoding the instruction N times.
+      TimeTraceScope timeScope("Decode successful inst");
+      for (size_t x = 0; x < 1000000; ++x) {
+        Inst.clear();
+        Inst.setOpcode(0);
+        S = DisAsm.getInstruction(Inst, Size, Data.slice(Index), Index, nulls());
+      }
     }
   }
 
