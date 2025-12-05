@@ -93,7 +93,7 @@ public:
     /// of this would be CHERI capabilities where the validity bit is stored
     /// separately from the pointer address+bounds information.
     bool HasExternalState;
-    // Symbolic name of the address space.
+    /// Symbolic name of the address space.
     std::string AddrSpaceName;
 
     LLVM_ABI bool operator==(const PointerSpec &Other) const;
