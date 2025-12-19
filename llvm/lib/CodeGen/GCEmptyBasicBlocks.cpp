@@ -30,9 +30,7 @@ class GCEmptyBasicBlocks : public MachineFunctionPass {
 public:
   static char ID;
 
-  GCEmptyBasicBlocks() : MachineFunctionPass(ID) {
-    initializeGCEmptyBasicBlocksPass(*PassRegistry::getPassRegistry());
-  }
+  GCEmptyBasicBlocks() : MachineFunctionPass(ID) {}
 
   StringRef getPassName() const override {
     return "Remove Empty Basic Blocks.";
