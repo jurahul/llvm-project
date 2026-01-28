@@ -22,6 +22,7 @@
 #include "llvm/Support/ModRef.h"
 #include "llvm/Support/SourceMgr.h"
 #include "llvm/Support/raw_ostream.h"
+#include "llvm/TableGen/CodeGenHelpers.h"
 #include "llvm/TableGen/Error.h"
 #include "llvm/TableGen/Record.h"
 #include "llvm/TableGen/StringToOffsetTable.h"
@@ -346,19 +347,16 @@ static std::optional<uint32_t> encodePacked(const TypeSigTy &TypeSig) {
   return Result;
 }
 
-void IntrinsicEmitter::EmitGenerator(const CodeGenIntrinsicTable &Ints,
-                                     raw_ostream &OS) {
-  // Note: the code below can be switched to use 32-bit fixed encoding by
-  // flipping the flag below.
-  constexpr bool Use16BitFixedEncoding = true;
+// Attemts to emit the ITT table using either 16-bit or 32 fixed encoding table.
+// Returns true if we were successful in emitting the table.
+template <bool Use16BitFixedEncoding>
+bool emitITT_Table(const CodeGenIntrinsicTable &Ints, raw_ostream &OS) {
   using FixedEncodingTy =
       std::conditional_t<Use16BitFixedEncoding, uint16_t, uint32_t>;
   constexpr unsigned FixedEncodingBits = sizeof(FixedEncodingTy) * CHAR_BIT;
+  constexpr unsigned MSBPostion = FixedEncodingBits - 1;
   // Mask with all bits 1 except the most significant bit.
-  const unsigned Mask = (1U << (FixedEncodingBits - 1)) - 1;
-  const unsigned MSBPostion = FixedEncodingBits - 1;
-  StringRef FixedEncodingTypeName =
-      Use16BitFixedEncoding ? "uint16_t" : "uint32_t";
+  constexpr unsigned Mask = (1U << MSBPostion) - 1;
 
   // If we can compute a 16/32-bit fixed encoding for this intrinsic, do so and
   // capture it in this vector, otherwise store a ~0U.
@@ -374,7 +372,7 @@ void IntrinsicEmitter::EmitGenerator(const CodeGenIntrinsicTable &Ints,
 
     // Check to see if we can encode it into a 16/32 bit word.
     std::optional<uint32_t> Result = encodePacked(TypeSig);
-    if (Result && (*Result & Mask) == Result) {
+    if (Result && (*Result & Mask) == *Result) {
       FixedEncodings.push_back(static_cast<FixedEncodingTy>(*Result));
       continue;
     }
@@ -387,13 +385,28 @@ void IntrinsicEmitter::EmitGenerator(const CodeGenIntrinsicTable &Ints,
 
   LongEncodingTable.layout();
 
+  // Check if the max offset we need to encode fits in the requested fixed
+  // encoding table entry.
+  if (!LongEncodingTable.empty()) {
+    unsigned LastOffset = LongEncodingTable.getLastOffset();
+
+    // verify that all offsets will fit in 16/32 bits.
+    if ((LastOffset & Mask) != LastOffset)
+      return false;
+  }
+
+  StringRef FixedEncodingTypeName =
+      Use16BitFixedEncoding ? "uint16_t" : "uint32_t";
+
+  // Emit the IIT Table.
+  IfDefEmitter IfDef(OS, "GET_INTRINSIC_GENERATOR_GLOBAL");
+
   OS << formatv(R"(// Global intrinsic function declaration type table.
-#ifdef GET_INTRINSIC_GENERATOR_GLOBAL
-static constexpr {} IIT_Table[] = {{
+using FixedEncodingTy = {};
+static constexpr FixedEncodingTy IIT_Table[] = {{
   )",
                 FixedEncodingTypeName);
 
-  unsigned MaxOffset = 0;
   for (auto [Idx, FixedEncoding, Int] : enumerate(FixedEncodings, Ints)) {
     if ((Idx & 7) == 7)
       OS << "\n  ";
@@ -406,7 +419,6 @@ static constexpr {} IIT_Table[] = {{
 
     TypeSigTy TypeSig = ComputeTypeSignature(Int);
     unsigned Offset = LongEncodingTable.get(TypeSig);
-    MaxOffset = std::max(MaxOffset, Offset);
 
     // Otherwise, emit the offset into the long encoding table.  We emit it this
     // way so that it is easier to read the offset in the .def file.
@@ -415,17 +427,28 @@ static constexpr {} IIT_Table[] = {{
 
   OS << "0\n};\n\n";
 
-  // verify that all offsets will fit in 16/32 bits.
-  if ((MaxOffset & Mask) != MaxOffset)
-    PrintFatalError("Offset of long encoding table exceeds encoding bits");
-
   // Emit the shared table of register lists.
   OS << "static constexpr unsigned char IIT_LongEncodingTable[] = {\n";
   if (!LongEncodingTable.empty())
     LongEncodingTable.emit(
         OS, [](raw_ostream &OS, unsigned char C) { OS << (unsigned)C; });
   OS << "  255\n};\n";
-  OS << "#endif\n\n"; // End of GET_INTRINSIC_GENERATOR_GLOBAL
+  return true;
+}
+
+void IntrinsicEmitter::EmitGenerator(const CodeGenIntrinsicTable &Ints,
+                                     raw_ostream &OS) {
+  // First attempt to emit the IIT table using 16-bit fixed encoding table.
+  if (emitITT_Table</*Use16BitFixedEncoding=*/true>(Ints, OS))
+    return;
+
+  // If that fails, attempt to emit the IIT table using 32-bit fixed encoding
+  // table.
+  if (emitITT_Table</*Use16BitFixedEncoding=*/false>(Ints, OS))
+    return;
+
+  // If that fails as well, report the failure.
+  PrintFatalError("Offset of long encoding table exceeds encoding bits");
 }
 
 /// Returns the effective MemoryEffects for intrinsic \p Int.

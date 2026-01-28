@@ -438,21 +438,24 @@ DecodeIITType(unsigned &NextElt, ArrayRef<unsigned char> Infos,
 
 void Intrinsic::getIntrinsicInfoTableEntries(
     ID id, SmallVectorImpl<IITDescriptor> &T) {
-  static_assert(sizeof(IIT_Table[0]) == 2,
-                "Expect 16-bit entries in IIT_Table");
   // Check to see if the intrinsic's type was expressible by the table.
-  uint16_t TableVal = IIT_Table[id - 1];
+  // Note that `FixedEncodingTy` is defined in IntrinsicImpl.inc.
+  FixedEncodingTy TableVal = IIT_Table[id - 1];
+  constexpr unsigned FixedEncodingBits = sizeof(FixedEncodingTy) * CHAR_BIT;
+  constexpr unsigned MSBPostion = FixedEncodingBits - 1;
+  // Mask with all bits 1 except the most significant bit.
+  constexpr unsigned Mask = (1U << MSBPostion) - 1;
 
   // Decode the TableVal into an array of IITValues.
   SmallVector<unsigned char> IITValues;
   ArrayRef<unsigned char> IITEntries;
   unsigned NextElt = 0;
-  if (TableVal >> 15) {
+  if (TableVal >> MSBPostion) {
     // This is an offset into the IIT_LongEncodingTable.
     IITEntries = IIT_LongEncodingTable;
 
     // Strip sentinel bit.
-    NextElt = TableVal & 0x7fff;
+    NextElt = TableVal & Mask;
   } else {
     // If the entry was encoded into a single word in the table itself, decode
     // it from an array of nibbles to an array of bytes.

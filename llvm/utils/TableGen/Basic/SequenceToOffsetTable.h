@@ -129,6 +129,13 @@ public:
     return I->second + (I->first.size() - Seq.size());
   }
 
+  /// Returns the offset of the last sequence in the final table.
+  unsigned getLastOffset() const {
+    assert(IsLaidOut && "Call layout() before getLast()");
+    typename SeqMap::const_iterator I = std::prev(Seqs.end());
+    return I->second;
+  }
+
   /// `emitStringLiteralDef` - Print out the table as the body of an array
   /// initializer, where each element is a C string literal terminated by
   /// `\0`. Falls back to emitting a comma-separated integer list if
