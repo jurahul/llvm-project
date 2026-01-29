@@ -439,7 +439,7 @@ static constexpr FixedEncodingTy IIT_Table[] = {{
 void IntrinsicEmitter::EmitGenerator(const CodeGenIntrinsicTable &Ints,
                                      raw_ostream &OS) {
   // First attempt to emit the IIT table using 16-bit fixed encoding table.
-  if (emitITT_Table</*Use16BitFixedEncoding=*/true>(Ints, OS))
+  if (0 && emitITT_Table</*Use16BitFixedEncoding=*/true>(Ints, OS))
     return;
 
   // If that fails, attempt to emit the IIT table using 32-bit fixed encoding
