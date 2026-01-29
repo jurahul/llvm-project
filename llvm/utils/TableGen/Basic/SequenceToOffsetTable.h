@@ -131,7 +131,7 @@ public:
 
   /// Returns the offset of the last sequence in the final table.
   unsigned getLastOffset() const {
-    assert(IsLaidOut && "Call layout() before getLast()");
+    assert(IsLaidOut && "Call layout() before getLastOffset()");
     typename SeqMap::const_iterator I = std::prev(Seqs.end());
     return I->second;
   }
