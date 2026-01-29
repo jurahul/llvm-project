@@ -347,10 +347,10 @@ static std::optional<uint32_t> encodePacked(const TypeSigTy &TypeSig) {
   return Result;
 }
 
-// Attemts to emit the ITT table using either 16-bit or 32 fixed encoding table.
+// Attemts to emit the IIT table using either 16-bit or 32 fixed encoding table.
 // Returns true if we were successful in emitting the table.
 template <bool Use16BitFixedEncoding>
-bool emitITT_Table(const CodeGenIntrinsicTable &Ints, raw_ostream &OS) {
+bool emitIIT_Table(const CodeGenIntrinsicTable &Ints, raw_ostream &OS) {
   using FixedEncodingTy =
       std::conditional_t<Use16BitFixedEncoding, uint16_t, uint32_t>;
   constexpr unsigned FixedEncodingBits = sizeof(FixedEncodingTy) * CHAR_BIT;
@@ -439,12 +439,12 @@ static constexpr FixedEncodingTy IIT_Table[] = {{
 void IntrinsicEmitter::EmitGenerator(const CodeGenIntrinsicTable &Ints,
                                      raw_ostream &OS) {
   // First attempt to emit the IIT table using 16-bit fixed encoding table.
-  if (0 && emitITT_Table</*Use16BitFixedEncoding=*/true>(Ints, OS))
+  if (emitIIT_Table</*Use16BitFixedEncoding=*/true>(Ints, OS))
     return;
 
   // If that fails, attempt to emit the IIT table using 32-bit fixed encoding
   // table.
-  if (emitITT_Table</*Use16BitFixedEncoding=*/false>(Ints, OS))
+  if (emitIIT_Table</*Use16BitFixedEncoding=*/false>(Ints, OS))
     return;
 
   // If that fails as well, report the failure.
